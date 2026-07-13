@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Control PC</title>
+  <style>
+    body { text-align:center; font-family:sans-serif; margin-top:80px; background:#1a1a1a; color:white; }
+    button { font-size:22px; padding:20px 50px; background:#e74c3c; color:white; border:none; border-radius:10px; cursor:pointer; }
+    #status { margin-top:20px; color:#aaa; }
+  </style>
+</head>
+<body>
+  <h2>Control PC</h2>
+  <button onclick="encender()">Encender PC</button>
+  <p id="status"></p>
+  <script>
+    const FBURL = "https://encender-pc-de830-default-rtdb.firebaseio.com/comando.json";
+    async function encender() {
+      document.getElementById('status').textContent = 'Enviando...';
+      await fetch(FBURL, { method:'PUT', body:JSON.stringify("encender"), headers:{'Content-Type':'application/json'} });
+      document.getElementById('status').textContent = '✅ Señal enviada, enciende en ~3 seg';
+    }
+  </script>
+</body>
+</html>
