@@ -12,13 +12,14 @@
 <body>
   <h2>Control PC</h2>
   <button onclick="encender()">Encender PC</button>
-  <p id="status"></p>
+  <p id="status">Conectando...</p>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
   <script>
-    const FBURL = "https://encender-pc-de830-default-rtdb.firebaseio.com/comando.json";
-    async function encender() {
-      document.getElementById('status').textContent = 'Enviando...';
-      await fetch(FBURL, { method:'PUT', body:JSON.stringify("encender"), headers:{'Content-Type':'application/json'} });
-      document.getElementById('status').textContent = '✅ Señal enviada, enciende en ~3 seg';
+    const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
+    client.on('connect', () => { document.getElementById('status').textContent = 'Listo'; });
+    function encender() {
+      client.publish('angel/pc/comando', 'encender');
+      document.getElementById('status').textContent = '✅ Señal enviada!';
     }
   </script>
 </body>
