@@ -1,26 +1,82 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Control PC</title>
-  <style>
-    body { text-align:center; font-family:sans-serif; margin-top:80px; background:#1a1a1a; color:white; }
-    button { font-size:22px; padding:20px 50px; background:#e74c3c; color:white; border:none; border-radius:10px; cursor:pointer; }
-    #status { margin-top:20px; color:#aaa; }
-  </style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Control PC</title>
+<style>
+body { text-align:center; font-family:sans-serif; margin-top:60px; background:#1a1a1a; color:white; padding:0 16px; }
+button { font-size:22px; padding:20px 50px; background:#e74c3c; color:white; border:none; border-radius:10px; cursor:pointer; }
+button:disabled { background:#555; cursor:not-allowed; }
+.row { margin-top:18px; color:#aaa; }
+.ok { color:#2ecc71; } .bad { color:#e74c3c; } .wait { color:#f1c40f; }
+</style>
 </head>
 <body>
-  <h2>Control PC</h2>
-  <button onclick="encender()">Encender PC</button>
-  <p id="status">Conectando...</p>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
-  <script>
-    const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
-    client.on('connect', () => { document.getElementById('status').textContent = 'Listo'; });
-    function encender() {
-      client.publish('angel/pc/comando', 'encender');
-      document.getElementById('status').textContent = '✅ Señal enviada!';
-    }
-  </script>
+<h2>Control PC</h2>
+<p class="row">Broker: <span id="broker" class="wait">conectando...</span></p>
+<p class="row">Wemos: <span id="wemos" class="wait">desconocido</span></p>
+<button id="btn" onclick="encender()" disabled>Encender PC</button>
+<p id="status" class="row"></p>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+<script>
+const T_CMD = 'angel/pc/comando';
+const T_ACK = 'angel/pc/ack';
+const T_WEMOS = 'angel/pc/wemos';   // "online" / "offline" (retenido + LWT)
+const TIMEOUT_MS = 5000;
+const MAX_INTENTOS = 3;
+
+const $ = id => document.getElementById(id);
+const set = (id, txt, cls) => { $(id).textContent = txt; $(id).className = cls || ''; };
+
+let pendiente = null; // { id, intento, timer }
+
+const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', {
+  reconnectPeriod: 2000,
+  clean: true
+});
+
+client.on('connect', () => {
+  set('broker', 'conectado', 'ok');
+  $('btn').disabled = false;
+  client.subscribe([T_ACK, T_WEMOS], { qos: 1 });
+});
+client.on('reconnect', () => set('broker', 'reconectando...', 'wait'));
+client.on('offline',   () => { set('broker', 'sin conexión', 'bad'); $('btn').disabled = true; });
+client.on('error',     e  => set('broker', 'error: ' + e.message, 'bad'));
+
+client.on('message', (topic, msg) => {
+  const m = msg.toString();
+  if (topic === T_WEMOS) {
+    set('wemos', m === 'online' ? 'en línea' : 'FUERA DE LÍNEA', m === 'online' ? 'ok' : 'bad');
+  }
+  if (topic === T_ACK && pendiente && m === pendiente.id) {
+    clearTimeout(pendiente.timer);
+    set('status', '✅ El Wemos recibió la orden y activó el pin', 'ok');
+    pendiente = null;
+    $('btn').disabled = false;
+  }
+});
+
+function enviar() {
+  pendiente.intento++;
+  set('status', `Enviando... (intento ${pendiente.intento}/${MAX_INTENTOS})`, 'wait');
+  client.publish(T_CMD, 'encender:' + pendiente.id, { qos: 1 });
+  pendiente.timer = setTimeout(() => {
+    if (!pendiente) return;
+    if (pendiente.intento < MAX_INTENTOS) return enviar();
+    set('status', '❌ El Wemos NO confirmó. La señal no llegó.', 'bad');
+    pendiente = null;
+    $('btn').disabled = false;
+  }, TIMEOUT_MS);
+}
+
+function encender() {
+  if (pendiente) return;
+  $('btn').disabled = true;
+  pendiente = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), intento: 0 };
+  enviar();
+}
+</script>
 </body>
 </html>
